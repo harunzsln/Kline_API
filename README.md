@@ -17,9 +17,9 @@ from datetime import datetime, timedelta
 # Create a receiver
 receiver = KlineReceiver(generator_class=KlineGenerator)
 
-# Fetch data (last 2 days)
-end_time = datetime.now()
-start_time = end_time - timedelta(days=2)
+# Fetch data (last 30 hours)
+end_time = datetime.now().replace(minute=0, second=0, microsecond=0)
+start_time = end_time - timedelta(hours=30)
 start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
 end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -38,7 +38,7 @@ print(df_1h.head())
 
 ### KlineGenerator
 
-Generates fake financial data for a specified date range.
+Generates financial data for a specified date range (1-hour intervals).
 
 ```python
 KlineGenerator.generate(start_date_str, end_date_str) → DataFrame
@@ -53,7 +53,7 @@ KlineGenerator.generate(start_date_str, end_date_str) → DataFrame
 
 ### KlineReceiver
 
-Takes raw data and transforms it into different time intervals.
+Takes hourly data and transforms it into different time intervals.
 
 ```python
 receiver = KlineReceiver(generator_class=KlineGenerator)
@@ -63,7 +63,7 @@ receiver = KlineReceiver(generator_class=KlineGenerator)
 
 | Method | Description |
 | :--- | :--- |
-| `fetch(start, end)` | Runs the data generator and retrieves raw data |
+| `fetch(start, end)` | Runs the data generator and retrieves hourly data |
 | `get_1h_klines()` | Returns 1-hour data |
 | `get_4h_klines()` | Returns 4-hour data |
 | `get_1d_klines()` | Returns 1-day data |
@@ -71,17 +71,22 @@ receiver = KlineReceiver(generator_class=KlineGenerator)
 ## How It Works
 
 1. **When fetch() is called:**
-   - `KlineGenerator.generate()` produces data
-   - `open` and `close` prices are created for each minute
-   - Data is stored in `self._raw_data`
+   - `KlineGenerator.generate()` produces hourly data
+   - `open` and `close` prices are created for each hour
+   - Data is stored in `self.df_1h`
 
 2. **When get_1h_klines() is called:**
-   - Minute-level data is grouped into 1-hour blocks
+   - Returns the stored 1-hour data directly
+
+3. **When get_4h_klines() is called:**
+   - 1-hour data is grouped into 4-hour blocks
    - The `open` value is taken from the first record of each block
    - The `close` value is taken from the last record of each block
    - A new DataFrame is returned
 
-3. **get_4h_klines() and get_1d_klines() work the same way**
+4. **When get_1d_klines() is called:**
+   - 1-hour data is grouped into 1-day blocks
+   - Same aggregation logic as 4-hour data
 
 ## Example Output
 
@@ -94,8 +99,8 @@ receiver = KlineReceiver(generator_class=KlineGenerator)
 
 ## Architecture
 
-**KlineGenerator** → Produces raw data (minute-level)
-**KlineReceiver** → Processes data (hourly, 4-hourly, daily)
+**KlineGenerator** → Produces hourly data
+**KlineReceiver** → Processes and transforms data into different intervals
 
 The two classes work independently. `KlineReceiver` doesn't know where the data comes from. `KlineGenerator` doesn't know how the data will be processed.
 
@@ -104,7 +109,7 @@ The two classes work independently. `KlineReceiver` doesn't know where the data 
 ```
 kline_api.py
 ├── KlineGenerator (class)
-│   └── generate() (method)
+│   └── generate() (static method)
 └── KlineReceiver (class)
     ├── __init__() (constructor)
     ├── fetch() (method)
@@ -119,4 +124,18 @@ kline_api.py
 python kline_api.py
 ```
 
-The program will generate data for the last 2 days and display it in 1h, 4h, and 1D formats.
+The program will generate data for the last 30 hours and display it in 1h, 4h, and 1D formats.
+
+## Data Flow
+
+```
+fetch(start, end)
+    ↓
+KlineGenerator.generate()
+    ↓
+Hourly data (df_1h)
+    ↓
+get_1h_klines()  →  1-hour data
+get_4h_klines()  →  4-hour data (resample + aggregate)
+get_1d_klines()  →  1-day data (resample + aggregate)
+```
